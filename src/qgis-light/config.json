@@ -207,14 +207,18 @@
       "ogr",
       "wcs",
       "WFS",
-      "wms"
+      "wms",
+      "sensorthings",
+      "stac"
     ],
     "data_items": [
       "files",
       "GPKG",
       "WCS",
       "WFS",
-      "WMS"
+      "WMS",
+      "SensorThings",
+      "STAC"
     ]
   },
   "statusbar": {
