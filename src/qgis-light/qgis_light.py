@@ -101,6 +101,64 @@ class QGISLightPlugin:
         )
 
 
+    def getProviders(self, name: bool=False) -> list[str]:
+        """Returns list of processing providers.
+
+        Args:
+            name (bool): Set True to get provider names.
+
+        Returns:
+            List of processing providers.
+        """
+        return [
+            provider.name() if name else provider.id()
+            for provider in QgsApplication.processingRegistry().providers()
+        ]
+
+
+    def getAlgorithms(self) -> list:
+        """Returns list of processing algorithms.
+
+        Returns:
+            List of processing algorithms (id, group, name).
+        """
+        algorithms = []
+
+        for provider in QgsApplication.processingRegistry().providers():
+          for algorithm in provider.algorithms():
+            algorithms.append({
+                'id': algorithm.id(),
+                'group': algorithm.group(),
+                'name': algorithm.displayName()
+            })
+
+        return algorithms
+
+
+    def getDataItemProviders(self) -> list:
+        """Returns list of data item providers.
+
+        Returns:
+            List of data item providers.
+        """
+        return [
+            provider.name()
+            for provider in QgsApplication.dataItemProviderRegistry().providers()
+        ]
+
+
+    def getDataSourceProviders(self) -> list:
+        """Returns list of data source providers.
+
+        Returns:
+            List of data source providers.
+        """
+        return [
+            provider.name()
+            for provider in QgsGui.sourceSelectProviderRegistry().providers()
+        ]
+
+
     def findAction(self, widget: QWidget, id: str) -> QAction:
         """Finds action with the specified identifier.
 
