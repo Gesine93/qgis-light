@@ -230,7 +230,7 @@ class QGISLightPlugin:
             algorithms = self.config["algorithms"][name]
 
             menu = QMenu(self.mainwindow)
-            self.addItems(menu, algorithms["menu"])
+            self.addItems(menu, algorithms["items"])
 
             toolbutton = QToolButton(self.mainwindow)
             toolbutton.setIcon(QIcon(algorithms["icon"]))

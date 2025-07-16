@@ -133,7 +133,7 @@
   "algorithms": {
     "raster": {
       "icon": ":/images/themes/default/mIconRaster.svg",
-      "menu": [
+      "items": [
         "gdal:viewshed",
         "native:hillshade",
         "qgis:relief",
@@ -161,7 +161,7 @@
     },
     "vector": {
       "icon": ":/images/themes/default/mIconVector.svg",
-      "menu": [
+      "items": [
         "native:buffer",
         "native:clip",
         "gdal:clipvectorbyextent",
