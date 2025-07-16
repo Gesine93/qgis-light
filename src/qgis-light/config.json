@@ -55,6 +55,12 @@
         ],
         "separator",
         "mAttributesToolBar:mActionIdentify",
+        [
+          "mAttributesToolBar:mActionMeasure",
+          "mAttributesToolBar:mActionMeasureArea",
+          "mAttributesToolBar:mActionMeasureBearing",
+          "mAttributesToolBar:mActionMeasureAngle"
+        ],
         "mAttributesToolBar:mActionOpenFieldCalc",
         "mAttributesToolBar:mActionStatisticalSummary",
         [
@@ -62,12 +68,6 @@
           "mAttributesToolBar:mActionOpenTableSelected",
           "mAttributesToolBar:mActionOpenTableVisible",
           "mAttributesToolBar:mActionOpenTableEdited"
-        ],
-        [
-          "mAttributesToolBar:mActionMeasure",
-          "mAttributesToolBar:mActionMeasureArea",
-          "mAttributesToolBar:mActionMeasureBearing",
-          "mAttributesToolBar:mActionMeasureAngle"
         ],
         "separator",
         "algorithms:vector",
