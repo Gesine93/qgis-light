@@ -67,12 +67,11 @@
           "mAttributesToolBar:mActionOpenTableEdited"
         ],
         "mAttributesToolBar:mActionStatisticalSummary",
+        "mPluginToolBar:DataPlotly",
         "mAttributesToolBar:mActionOpenFieldCalc",
         "separator",
         "algorithms:vector",
         "algorithms:raster",
-        "separator",
-        "mPluginToolBar:DataPlotly",
         "separator",
         "mHelpToolBar:mActionHelpContents",
         "separator",
