@@ -61,14 +61,14 @@
           "mAttributesToolBar:mActionMeasureBearing",
           "mAttributesToolBar:mActionMeasureAngle"
         ],
-        "mAttributesToolBar:mActionOpenFieldCalc",
-        "mAttributesToolBar:mActionStatisticalSummary",
         [
           "mAttributesToolBar:mActionOpenTable",
           "mAttributesToolBar:mActionOpenTableSelected",
           "mAttributesToolBar:mActionOpenTableVisible",
           "mAttributesToolBar:mActionOpenTableEdited"
         ],
+        "mAttributesToolBar:mActionOpenFieldCalc",
+        "mAttributesToolBar:mActionStatisticalSummary",
         "separator",
         "algorithms:vector",
         "algorithms:raster",
