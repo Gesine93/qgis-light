@@ -40,21 +40,18 @@
           "mSelectionToolBar:mActionSelectFeatures",
           "mSelectionToolBar:mActionSelectPolygon",
           "mSelectionToolBar:mActionSelectFreehand",
-          "mSelectionToolBar:mActionSelectRadius"
-        ],
-        [
+          "mSelectionToolBar:mActionSelectRadius",
+          "section:",
+          "mSelectionToolBar:mProcessingAlg_native:selectbylocation",
+          "mSelectionToolBar:mProcessingAlg_native:selectwithindistance",
+          "section:",
           "mSelectionToolBar:mActionSelectByForm",
-          "mSelectionToolBar:mActionSelectByExpression"
-        ],
-        [
+          "mSelectionToolBar:mActionSelectByExpression",
+          "section:",
           "mSelectionToolBar:mActionSelectAll",
           "mSelectionToolBar:mActionInvertSelection",
           "mSelectionToolBar:mActionDeselectAll",
           "mSelectionToolBar:mActionDeselectActiveLayer"
-        ],
-        [
-          "mSelectionToolBar:mProcessingAlg_native:selectbylocation",
-          "mSelectionToolBar:mProcessingAlg_native:selectwithindistance"
         ],
         "separator",
         "mAttributesToolBar:mActionIdentify",
