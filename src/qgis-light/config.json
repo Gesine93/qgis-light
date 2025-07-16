@@ -64,7 +64,6 @@
           "mAttributesToolBar:mActionOpenTable",
           "mAttributesToolBar:mActionOpenTableSelected",
           "mAttributesToolBar:mActionOpenTableVisible",
-          "mAttributesToolBar:mActionOpenTableEdited"
         ],
         "mAttributesToolBar:mActionStatisticalSummary",
         "mPluginToolBar:DataPlotly",
