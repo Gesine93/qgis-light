@@ -35,7 +35,6 @@
           "mMapNavToolBar:mActionZoomLast",
           "mMapNavToolBar:mActionZoomNext"
         ],
-        "separator",
         [
           "mSelectionToolBar:mActionSelectFeatures",
           "mSelectionToolBar:mActionSelectPolygon",
