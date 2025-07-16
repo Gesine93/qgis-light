@@ -66,8 +66,8 @@
           "mAttributesToolBar:mActionOpenTableVisible",
           "mAttributesToolBar:mActionOpenTableEdited"
         ],
-        "mAttributesToolBar:mActionOpenFieldCalc",
         "mAttributesToolBar:mActionStatisticalSummary",
+        "mAttributesToolBar:mActionOpenFieldCalc",
         "separator",
         "algorithms:vector",
         "algorithms:raster",
