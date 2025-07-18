@@ -4,6 +4,7 @@
 | (2/5) license             | [![github license badge](https://img.shields.io/github/license/ITC-CRIB/qgis-light)](https://github.com/ITC-CRIB/qgis-light) |
 | (3/5) community registry  | [![QGIS plugin repository badge](https://img.shields.io/badge/QGIS-Plugin_Repository-%23589632?style=flat&logo=qgis)](https://plugins.qgis.org/plugins/qgis-light/) |
 | (4/5) citation            | [![Zenodo badge](https://zenodo.org/badge/DOI/10.5281/zenodo.13831537.svg)](https://doi.org/10.5281/zenodo.13831537) |
+|                           | [![ISPRS badge](https://img.shields.io/badge/DOI-10.5194/isprs--archives--XLVIII--4--W13--2025--127--2025-blue)](https://doi.org/10.5194/isprs-archives-XLVIII-4-W13-2025-127-2025) |
 | (5/5) checklist           | [![FAIR checklist badge](https://fairsoftwarechecklist.net/badge.svg)](https://fairsoftwarechecklist.net/v0.2?f=31&a=32113&i=02322&r=133) |
 
 
@@ -22,6 +23,20 @@ tailored to the needs of basic users. Our starting point was to support
 secondary education and citizen science activities. But a basic interface might
 also be useful for anybody that requires core data visualization, editing, and
 analysis functionality.
+
+Detailed information about the plugin, including the user stories and technical
+constraints that guided its design, and usability challenges identified for
+non-technical QGIS users, can be found in the following resources:
+
+- Girgin, S., Gohil, J., and Mydur, I. (2025) A streamlined GIS interface for
+  Citizen Science activities: QGIS Light, Int. Arch. Photogramm. Remote Sens.
+  Spatial Inf. Sci., XLVIII-4/W13-2025, 127–134,
+  https://doi.org/10.5194/isprs-archives-XLVIII-4-W13-2025-127-2025
+
+- Girgin, S., Gohil, J. H., & Mydur, I. (2025). A streamlined GIS interface
+  for Citizen Science activities: QGIS Light (Presentation). FOSS4G Europe
+  2025, Mostar, Bosnia-Herzegovina, 16 July 2025. Zenodo.
+  https://doi.org/10.5281/zenodo.16082546
 
 
 ## How to simplify the QGIS interface?
