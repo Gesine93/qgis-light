@@ -156,9 +156,62 @@ The following simplifications are performed by the plugin:
     QuickMapServices provides a large set of base maps that can be added as
     layers easily.
 
+
+## How to change simplifications?
+
 Most of the simplifications listed above can be customized by editing the
-[`config.json`](src/qgis-light/config.json) file located under the plugin
-source code directory.
+[`config.json`](src/qgis-light/config.json) file located in the plugin
+directory.
+
+The configuration file is divided into five sections:
+
+- **toolbars**: The *toolbars* section defines which toolbars will appear in the
+  simplified GUI. Each toolbar is specified by a unique identifier (e.g.,
+  mMainToolBar), which must not conflict with those used by QGIS or other
+  installed plugins. Each toolbar entry includes a title, a location (e.g.,
+  top, left), and a list of items to display. An item typically represents a
+  tool from an existing toolbar, referenced by combining the original toolbar
+  id and the tool's action id with a colon (e.g.,
+  mFileToolbar:mActionNewProject). When multiple such identifiers are listed in
+  an array, they are grouped into a drop-down button, with the first item
+  shown as the default. Similarly, groups of algorithms defined in the
+  *algorithms* section can also be presented as drop-down buttons. A separator
+  item can be added between tools, tool groups, or algorithms to visually
+  separate them. By default, the configuration file includes two toolbar
+  definitions, one for the main toolbar and another one for the editing
+  toolbar. Additional toolbars can be added, or existing ones can be modified
+  to further customize the simplified interface.
+
+- **algorithms**: The *algorithms* section allows processing algorithms provided
+  by QGIS to be organized into tool groups that can be added to toolbars. Each
+  algorithm group is identified by a unique id and includes an icon along with
+  a list of algorithm items. Like tool items, algorithm items are identified by
+  two-part identifiers: one part designates the processing provider, and the
+  other specifies the algorithm itself (e.g., native:buffer). Currently,
+  algorithms are categorized into two groups as raster or vector based on the
+  data type they operate on. All core raster and vector processing algorithms
+  provided by QGIS either natively or by using GDAL are included and separated
+  by section headings for easier navigation. The lists represent an initial
+  selection and may be revised in the future based on community feedback.
+
+- **panels**: The *panels* section enables specifying which panels will be
+  available in the simplified interface, along with their placement and initial
+  visibility. Any panels not included in this section are hidden by the plugin,
+  and their associated functionalities, such as tools and algorithms, are also
+  disabled.
+
+- **providers**: The *providers* section allows data source and data item
+  providers enabled in the simplified interface to be specified. Data source
+  providers are components that enable QGIS to connect to and read data from
+  various data sources, whereas data item providers handle how the data is
+  represented, managed, and interacted with once loaded within the QGIS
+  environment. They can be enabled by adding their identifiers to the list of
+  data sources or data items in this section.
+
+- **statusbar**: The *statusbar* section enables certain widgets to be disabled.
+  QGIS Light features utility methods to retrieve the ids of toolbars, tool
+  actions, algorithm providers, algorithms, data source providers, data item
+  providers, and status bar widgets to facilitate easy configuration.
 
 
 ## Why there is a need for a plugin for the simplifications?
