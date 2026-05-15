@@ -1,9 +1,12 @@
 import os.path
 import json
+import psycopg2
+import psycopg2.extras
 
 from qgis.core import (
     Qgis,
     QgsApplication,
+    QgsAuthMethodConfig,
     QgsSettings
 )
 from qgis.gui import (
@@ -22,7 +25,9 @@ from qgis.PyQt.QtWidgets import (
     QWidgetAction
 )
 
+
 from processing import execAlgorithmDialog
+from urllib.parse import quote 
 
 
 class QGISLightPlugin:
@@ -33,6 +38,7 @@ class QGISLightPlugin:
         "info": Qgis.MessageLevel.Info,
         "warning": Qgis.MessageLevel.Warning,
         "error": Qgis.MessageLevel.Critical,
+        "success": Qgis.Success
     }
 
     # Toolbar areas
@@ -53,28 +59,236 @@ class QGISLightPlugin:
 
 
     def __init__(self, iface: QgisInterface):
-        """Initializes the plugin.
+        """Initializes the plugin."""
 
-        Args:
-            iface (QgisInterface): QGIS interface object.
-        """
-        # Set interface
+        # Interface
         self.iface = iface
-
-        # Get main window
         self.mainwindow = iface.mainWindow()
-
-        # Get settings
         self.settings = QgsSettings()
 
-        # Get plugin directory
+        # Plugin directory
         self.plugin_dir = os.path.dirname(os.path.realpath(__file__))
-        self.log(f"Plugin directory is {self.plugin_dir}.")
+        self.log(f"Plugin directory is {self.plugin_dir}")
 
-        # Load configuration
-        with open(os.path.join(self.plugin_dir, "config.json")) as file:
-            self.config = json.load(file)
-        self.log("Configuration loaded.")
+        # Defaults
+        self.user = None
+        self.matched_roles = []
+
+        # Default Config
+        standard_config_path = os.path.join(self.plugin_dir, "config.json")
+
+        # load connection parameters from confog.json
+        connections_path = os.path.join(self.plugin_dir, "connections.json")
+        connection_cfg = self._load_json(connections_path, label="Verbindungsparameter")
+
+        # load roles.json 
+        roles_path = os.path.join(self.plugin_dir, "roles.json")
+        roles_cfg = self._load_json(roles_path, label="DB Role Mappping")
+
+        # load users.json
+        users_path = os.path.join(self.plugin_dir, "users.json")
+        users_cfg = self._load_json(users_path, label="User Mapping")
+
+        # set config path
+        config_path = standard_config_path  
+
+
+        # check for username in users.json
+        resolved = self._resolve_config_by_user(users_cfg)
+        if resolved:
+            config_path = resolved
+        else:
+            # check for user's db role in roles.json
+            if connection_cfg and roles_cfg:
+                resolved = self._resolve_config_by_role(
+                    connection_cfg, roles_cfg, fallback_path=None
+                )
+                if resolved:
+                    config_path = resolved
+
+
+        if config_path == standard_config_path:
+            self.log("No specific mapping found – using default configuration.", "info")
+
+        self.config = {}
+        try:
+            with open(config_path, encoding="utf-8") as f:
+                self.config = json.load(f)
+            self.log(f"Configuration loaded from {config_path}")
+        except Exception as e:
+            self.log(f"Couldn't load config file ({config_path}): {e}", "error")
+
+
+    def _load_json(self, path: str, label: str = "JSON") -> dict | None:
+        """Loads a JSON file and returns its content.
+
+        Returns None if the file does not exist or is invalid.
+
+        Args:
+            path: File path.
+            label: Label used for log messages.
+        """
+
+        if not os.path.isfile(path):
+            self.log(f"Couldn't find {label}: {path}", "warning")
+            return None
+        try:
+            with open(path, encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            self.log(f"Couldn't load {label} ({path}): {e}", "error")
+            return None
+
+    def _get_auth_username(self) -> str | None:
+        """Reads the username from the QGIS Auth Manager.
+
+        Returns:
+            Username or None if no auth entry exists.
+        """
+
+        try:
+            manager = QgsApplication.authManager()
+            auth_method_cfg = QgsAuthMethodConfig()
+            auth_ids = manager.availableAuthMethodConfigs()
+            if not auth_ids:
+                return None
+            auth_id = list(auth_ids.keys())[0]
+            manager.loadAuthenticationConfig(auth_id, auth_method_cfg, True)
+            return auth_method_cfg.configMap().get("username")
+        except Exception as e:
+            self.log(f"Username could not be read from the Auth Manager: {e}", "warning")
+            return None
+
+    def _resolve_config_by_role(
+        self,
+        connection_cfg: dict,
+        roles_cfg: dict,
+        fallback_path: str | None
+    ) -> str | None:
+        """
+        Checks the database roles of the current user and returns the corresponding config path.
+
+        Args:
+            connection_cfg: Connection parameters from connections.json.
+            roles_cfg: Role mapping from roles.json.
+            fallback_path: Return value if no role matches (None = no fallback).
+
+        Returns:
+            Config path or fallback_path.
+        """
+
+        try:
+            # Retrieve auth credentials from the QGIS Auth Manager
+            manager = QgsApplication.authManager()
+            auth_ids = manager.availableAuthMethodConfigs()
+            if not auth_ids:
+                self.log("No authentication stored in QGIS – role check skipped.", "warning")
+                return fallback_path
+
+            auth_id = list(auth_ids.keys())[0]
+            auth_method_cfg = QgsAuthMethodConfig()
+            manager.loadAuthenticationConfig(auth_id, auth_method_cfg, True)
+            user = auth_method_cfg.configMap().get("username")
+            password = auth_method_cfg.configMap().get("password")
+            self.user = user
+
+            # connection parameters
+            host = connection_cfg.get("host")
+            port = int(connection_cfg.get("port", 5432))
+            dbname = connection_cfg.get("dbname")
+
+            if not host or not port or not dbname:
+                self.log("Verbindungsparameter unvollständig – Rollenprüfung übersprungen.", "warning")
+                return fallback_path
+
+            # roles
+            role_entries: list[dict] = roles_cfg.get("roles", [])
+            role_names = [entry["rolname"] for entry in role_entries if "rolname" in entry]
+
+            if not role_names:
+                self.log("Keine Rollen in roles.json definiert – Rollenprüfung übersprungen.", "warning")
+                return fallback_path
+
+            # prepare SQL
+            sql = """
+                SELECT r1.rolname
+                FROM pg_roles r
+                JOIN pg_auth_members m ON m.member = r.oid
+                JOIN pg_roles r1 ON m.roleid = r1.oid
+                WHERE r.rolname = %s
+                AND r1.rolname = ANY(%s)
+            """
+
+            # DB-connection with psycopg2 
+            conn = psycopg2.connect(
+                host=host,
+                port=port,
+                dbname=dbname,
+                user=user,
+                password=password
+            )
+            cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            cur.execute(sql, (user, role_names))
+            rows = cur.fetchall()
+            conn.close()
+
+            self.matched_roles = [row["rolname"] for row in rows]
+
+            if not self.matched_roles:
+                self.log(f"User '{user}' does not have any of the configured roles.", "info")
+                return fallback_path
+
+            self.log(f"User '{user}' – found roles: {self.matched_roles}")
+
+            # First matching role → determine config path (priority = order in roles.json)
+
+            for entry in role_entries:
+                if entry.get("rolname") in self.matched_roles:
+                    cfg_path = entry.get("config_path")
+                    if cfg_path and os.path.isfile(cfg_path):
+                        self.log(f"Role-based config found: {cfg_path}")
+                        return cfg_path
+                    else:
+                        self.log(f"Config path for role '{entry['rolname']}' not found: {cfg_path}", "warning")
+
+            self.log("No valid role-based config – continuing with next step.", "warning")
+            return fallback_path
+
+        except Exception as e:
+            import traceback
+            self.log(f"Role check failed: {e}", "error")
+            self.log(traceback.format_exc(), "error")
+            return fallback_path
+    
+    def _resolve_config_by_user(self, users_cfg: dict) -> str | None:
+        """Returns config path based on users.json."""
+
+        if not users_cfg:
+            return None
+
+        if not self.user:
+            self.user = self._get_auth_username()
+
+        if not self.user:
+            self.log("No username available for users.json.", "warning")
+            return None
+ 
+        user_entries = users_cfg.get("users", [])
+
+        for entry in user_entries:
+            usernames = entry.get("usernames", [])
+            
+            if self.user in usernames:
+                cfg_path = entry.get("config_path")
+                if cfg_path and os.path.isfile(cfg_path):
+                    self.log(f"User-based config found: {cfg_path}")
+                    return cfg_path
+                else:
+                    self.log(f"Config for user '{self.user}' is invalid: {cfg_path}", "warning")
+
+        self.log(f"No entry for user '{self.user}' in users.json.", "info")
+        return None
+
 
 
     def log(self, message: str, level: str = "info"):
@@ -101,64 +315,6 @@ class QGISLightPlugin:
         )
 
 
-    def getProviders(self, name: bool=False) -> list[str]:
-        """Returns list of processing providers.
-
-        Args:
-            name (bool): Set True to get provider names.
-
-        Returns:
-            List of processing providers.
-        """
-        return [
-            provider.name() if name else provider.id()
-            for provider in QgsApplication.processingRegistry().providers()
-        ]
-
-
-    def getAlgorithms(self) -> list:
-        """Returns list of processing algorithms.
-
-        Returns:
-            List of processing algorithms (id, group, name).
-        """
-        algorithms = []
-
-        for provider in QgsApplication.processingRegistry().providers():
-          for algorithm in provider.algorithms():
-            algorithms.append({
-                'id': algorithm.id(),
-                'group': algorithm.group(),
-                'name': algorithm.displayName()
-            })
-
-        return algorithms
-
-
-    def getDataItemProviders(self) -> list:
-        """Returns list of data item providers.
-
-        Returns:
-            List of data item providers.
-        """
-        return [
-            provider.name()
-            for provider in QgsApplication.dataItemProviderRegistry().providers()
-        ]
-
-
-    def getDataSourceProviders(self) -> list:
-        """Returns list of data source providers.
-
-        Returns:
-            List of data source providers.
-        """
-        return [
-            provider.name()
-            for provider in QgsGui.sourceSelectProviderRegistry().providers()
-        ]
-
-
     def findAction(self, widget: QWidget, id: str) -> QAction:
         """Finds action with the specified identifier.
 
@@ -177,16 +333,9 @@ class QGISLightPlugin:
                 action = self.findAction(action.defaultWidget(), id)
 
             elif id in [action.objectName(), action.text(), action.toolTip()]:
-                pass
-
-            elif action.menu():
-                action = self.findAction(action.menu(), id)
-
-            else:
-                continue
-
-            if action:
                 return action
+
+        return None
 
 
     def getItems(self, token: str) -> list:
@@ -316,13 +465,36 @@ class QGISLightPlugin:
                 self.log(f"Invalid item {item}.", "warning")
 
 
-    def restoreLayout(self):
-        """Restores layout of the user interface.
 
-        Toolbars and panels are restored to the layout that was stored before
-        the simplifications were enabled.
-        """
-        self.log("Restoring user interface layout.")
+
+
+    def saveLayout(self):
+
+        # Save toolbars
+        items = []
+        for toolbar in self.mainwindow.findChildren(QToolBar):
+            if toolbar.parent() == self.mainwindow:
+                items.append({
+                    "name": toolbar.objectName(),
+                    "area": self.mainwindow.toolBarArea(toolbar),
+                })
+        self.settings.setValue("qgislight/toolbars", items)
+        self.log("Toolbars saved.")
+
+        # Save panels
+        items = []
+        for panel in self.mainwindow.findChildren(QDockWidget):
+            items.append({
+                "name": panel.objectName(),
+                "area": self.mainwindow.dockWidgetArea(panel),
+                "features": panel.features(),
+                "hidden": panel.isHidden(),
+            })
+        self.settings.setValue("qgislight/panels", items)
+        self.log("Panels saved.")
+
+
+    def restoreLayout(self):
 
         # Restore toolbars
         items = self.settings.value("qgislight/toolbars", [])
@@ -456,6 +628,12 @@ class QGISLightPlugin:
             )
             self.addItems(toolbar, item["items"])
             toolbar.show()
+
+        # Such-Plugin Discovery einblenden - TS
+        suche = self.mainwindow.findChild(QToolBar, "Discovery_Plugin")
+        if suche:
+            suche.show()
+            self.mainwindow.insertToolBar(suche, toolbar) # Discovery nach rechts
 
         # Set up panels
         panels = self.config.get("panels", {})

@@ -1,0 +1,6 @@
+{
+  "_comment": "Verbindungsparameter für die PostgreSQL-Rollenprüfung.",
+  "host": "",
+  "port": "",
+  "dbname": ""
+}
