@@ -7,7 +7,8 @@ from qgis.core import (
     Qgis,
     QgsApplication,
     QgsAuthMethodConfig,
-    QgsSettings
+    QgsSettings,
+    QgsProject
 )
 from qgis.gui import (
     QgisInterface,
@@ -89,20 +90,36 @@ class QGISLightPlugin:
         users_path = os.path.join(self.plugin_dir, "users.json")
         users_cfg = self._load_json(users_path, label="User Mapping")
 
+        # load projects.json
+        projects_path = os.path.join(self.plugin_dir, "projects.json")
+        projects_cfg = self._load_json(projects_path, label="Project Mapping")
+
         # set config path
         config_path = standard_config_path  
 
 
-        # check for username in users.json
+        # 1. user mapping
         resolved = self._resolve_config_by_user(users_cfg)
+
         if resolved:
             config_path = resolved
+
         else:
-            # check for user's db role in roles.json
+            # 2. role mapping
             if connection_cfg and roles_cfg:
                 resolved = self._resolve_config_by_role(
-                    connection_cfg, roles_cfg, fallback_path=None
+                    connection_cfg,
+                    roles_cfg,
+                    fallback_path=None
                 )
+
+                if resolved:
+                    config_path = resolved
+
+            # 3. project mapping
+            if config_path == standard_config_path and projects_cfg:
+                resolved = self._resolve_config_by_project(projects_cfg)
+
                 if resolved:
                     config_path = resolved
 
@@ -288,6 +305,54 @@ class QGISLightPlugin:
 
         self.log(f"No entry for user '{self.user}' in users.json.", "info")
         return None
+    
+
+
+    def _resolve_config_by_project(self, projects_cfg: dict) -> str | None:
+        """Returns config path based on current QGIS project."""
+
+        if not projects_cfg:
+            return None
+
+        try:
+            project = QgsProject.instance()
+
+            project_path = project.fileName()
+
+            if not project_path:
+                self.log("No QGIS project loaded.", "info")
+                return None
+
+            project_name = os.path.basename(project_path)
+
+            self.log(f"Current project: {project_name}")
+
+            project_entries = projects_cfg.get("projects", [])
+
+            for entry in project_entries:
+
+                names = entry.get("project_names", [])
+
+                if project_name in names:
+
+                    cfg_path = entry.get("config_path")
+
+                    if cfg_path and os.path.isfile(cfg_path):
+                        self.log(f"Project-based config found: {cfg_path}")
+                        return cfg_path
+
+                    else:
+                        self.log(
+                            f"Invalid config for project '{project_name}': {cfg_path}",
+                            "warning"
+                        )
+
+            self.log(f"No project mapping found for '{project_name}'.", "info")
+            return None
+
+        except Exception as e:
+            self.log(f"Project mapping failed: {e}", "error")
+            return None
 
 
 

@@ -261,6 +261,8 @@ automatically load the matching configuration file. It can be used in two ways:
 - **Role-based configuration**: PostgreSQL/PostGIS roles
   are used as authenticated users, and matching
   configuration files are loaded automatically.
+  - **Project-based configuration**: The configuration can also be defined by project name. 
+  The project and config paths can be defined in the `projects.json`
 
 ### Prerequisites
 
@@ -270,8 +272,8 @@ To use this feature, the following requirements must be met:
    or as PostgreSQL roles and the `roles.json` contains the role.
 2. Matching authentication configurations are created in the QGIS
    Authentication Manager.
-4. To implement the role-based-configuration, the PostgreSQL connection has to be defined in `connections.json`
-3. A QGIS Light configuration file exists for each user or role.
+3. To implement the role-based-configuration, the PostgreSQL connection has to be defined in `connections.json`
+4. A QGIS Light configuration file exists for each user or role.
 
 
 
