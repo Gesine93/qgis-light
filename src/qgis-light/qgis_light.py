@@ -75,65 +75,111 @@ class QGISLightPlugin:
         self.user = None
         self.matched_roles = []
 
-        # Default Config
-        standard_config_path = os.path.join(self.plugin_dir, "config.json")
+        # Default config
+        self.standard_config_path = os.path.join(
+            self.plugin_dir,
+            "config.json"
+        )
 
-        # load connection parameters from confog.json
-        connections_path = os.path.join(self.plugin_dir, "connections.json")
-        connection_cfg = self._load_json(connections_path, label="Verbindungsparameter")
+        # JSON paths
+        connections_path = os.path.join(
+            self.plugin_dir,
+            "connections.json"
+        )
 
-        # load roles.json 
-        roles_path = os.path.join(self.plugin_dir, "roles.json")
-        roles_cfg = self._load_json(roles_path, label="DB Role Mappping")
+        roles_path = os.path.join(
+            self.plugin_dir,
+            "roles.json"
+        )
 
-        # load users.json
-        users_path = os.path.join(self.plugin_dir, "users.json")
-        users_cfg = self._load_json(users_path, label="User Mapping")
+        users_path = os.path.join(
+            self.plugin_dir,
+            "users.json"
+        )
 
-        # load projects.json
-        projects_path = os.path.join(self.plugin_dir, "projects.json")
-        projects_cfg = self._load_json(projects_path, label="Project Mapping")
+        projects_path = os.path.join(
+            self.plugin_dir,
+            "projects.json"
+        )
 
-        # set config path
-        config_path = standard_config_path  
+        # Load mapping JSONs
+        self.connection_cfg = self._load_json(
+            connections_path,
+            label="Verbindungsparameter"
+        )
 
+        self.roles_cfg = self._load_json(
+            roles_path,
+            label="DB Role Mapping"
+        )
 
-        # 1. user mapping
-        resolved = self._resolve_config_by_user(users_cfg)
+        self.users_cfg = self._load_json(
+            users_path,
+            label="User Mapping"
+        )
+
+        self.projects_cfg = self._load_json(
+            projects_path,
+            label="Project Mapping"
+        )
+
+        # Resolve config
+        config_path = self.resolve_config()
+
+        if config_path == self.standard_config_path:
+            self.log(
+                "No specific mapping found – using default configuration.",
+                "info"
+            )
+
+        # active config path
+        self.config_path = config_path
+
+        # active config
+        self.config = {}
+
+        # load config
+        self.apply_config(config_path)
+
+    def resolve_config(self) -> str:
+        """Resolve active config path."""
+
+        standard_config_path = os.path.join(
+            self.plugin_dir,
+            "config.json"
+        )
+
+        config_path = standard_config_path
+
+        # 1 user
+        resolved = self._resolve_config_by_user(self.users_cfg)
 
         if resolved:
-            config_path = resolved
+            return resolved
 
-        else:
-            # 2. role mapping
-            if connection_cfg and roles_cfg:
-                resolved = self._resolve_config_by_role(
-                    connection_cfg,
-                    roles_cfg,
-                    fallback_path=None
-                )
+        # 2 role
+        if self.connection_cfg and self.roles_cfg:
 
-                if resolved:
-                    config_path = resolved
+            resolved = self._resolve_config_by_role(
+                self.connection_cfg,
+                self.roles_cfg,
+                fallback_path=None
+            )
 
-            # 3. project mapping
-            if config_path == standard_config_path and projects_cfg:
-                resolved = self._resolve_config_by_project(projects_cfg)
+            if resolved:
+                return resolved
 
-                if resolved:
-                    config_path = resolved
+        # 3 project
+        if self.projects_cfg:
 
+            resolved = self._resolve_config_by_project(
+                self.projects_cfg
+            )
 
-        if config_path == standard_config_path:
-            self.log("No specific mapping found – using default configuration.", "info")
+            if resolved:
+                return resolved
 
-        self.config = {}
-        try:
-            with open(config_path, encoding="utf-8") as f:
-                self.config = json.load(f)
-            self.log(f"Configuration loaded from {config_path}")
-        except Exception as e:
-            self.log(f"Couldn't load config file ({config_path}): {e}", "error")
+        return config_path
 
 
     def _load_json(self, path: str, label: str = "JSON") -> dict | None:
@@ -353,6 +399,53 @@ class QGISLightPlugin:
         except Exception as e:
             self.log(f"Project mapping failed: {e}", "error")
             return None
+        
+
+    def apply_config(self, config_path: str):
+        """Loads config file."""
+
+        self.config = {}
+
+        try:
+
+            with open(config_path, encoding="utf-8") as f:
+                self.config = json.load(f)
+
+            self.config_path = config_path
+
+            self.log(f"Configuration loaded from {config_path}")
+
+        except Exception as e:
+            self.log(
+                f"Couldn't load config file ({config_path}): {e}",
+                "error"
+            )
+        
+    def check_project_config(self, *args):
+        """Re-resolve config after project change."""
+
+        new_config = self.resolve_config()
+
+        # already active
+        if new_config == self.config_path:
+
+            self.log("Correct config already active.")
+            return
+
+        self.log(f"Switching config to: {new_config}")
+
+        enabled = self.settings.value("qgislight/enabled") == "true"
+
+        # disable current UI
+        if enabled:
+            self.disable(store=False)
+
+        # load new config
+        self.apply_config(new_config)
+
+        # enable again
+        if enabled:
+            self.enable(store=False)
 
 
 
@@ -764,6 +857,21 @@ class QGISLightPlugin:
 
     def initGui(self):
         """Initializes plugin user interface."""
+        # remove stale action from plugin reloads
+        existing = self.mainwindow.findChild(
+            QAction,
+            "mActionToggleQGISLight"
+        )
+
+        if existing:
+
+            self.log("Removing stale QGIS Light action.")
+
+            for widget in existing.associatedWidgets():
+                widget.removeAction(existing)
+
+            existing.deleteLater()
+        
         self.log("Initializing user interface.")
 
         # Get enabled flag
@@ -791,6 +899,9 @@ class QGISLightPlugin:
         # Add action to the view menu
         self.iface.viewMenu().addAction(action)
 
+        # signal for loading right config for project
+        QgsProject.instance().readProject.connect(self.check_project_config)
+
 
     def unload(self):
         """Unloads plugin."""
@@ -804,3 +915,10 @@ class QGISLightPlugin:
             for widget in action.associatedWidgets():
                 widget.removeAction(action)
             action.deleteLater()
+        
+        try:
+            QgsProject.instance().readProject.disconnect(
+                self.check_project_config
+            )
+        except:
+            pass
