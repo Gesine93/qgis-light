@@ -108,23 +108,14 @@ class QGISLightPlugin:
         return action.associatedWidgets()
 
     @staticmethod
-    def toEnum(enum_type, value):
-        """Coerces a value read from settings to a Qt enum type.
-
-        QgsSettings preserves Qt enum types under Qt6 but returns plain
-        integers under Qt5, so stored toolbar/panel areas and feature flags
-        must be normalized before they are passed back to Qt.
-
-        Args:
-            enum_type: Target Qt enum or flag type.
-            value: Value read from settings (an enum/flag or an integer).
-
-        Returns:
-            The value as an instance of enum_type.
-        """
-        if isinstance(value, enum_type):
-            return value
-        return enum_type(value)
+    def enumValue(enum):
+        """Returns value of a Qt enum type."""
+        if enum is None:
+            return None
+        elif hasattr(enum, "value"):
+            return enum.value
+        else:
+            return int(enum)
 
     def getProviders(self, name: bool = False) -> list[str]:
         """Returns list of processing providers.
@@ -352,7 +343,7 @@ class QGISLightPlugin:
                 self.log(f"Toolbar {item['name']} not found.", "warning")
                 continue
 
-            area = self.toEnum(Qt.ToolBarArea, item["area"])
+            area = Qt.ToolBarArea(item["area"])
             if self.mainwindow.toolBarArea(toolbar) != area:
                 self.mainwindow.addToolBar(area, toolbar)
 
@@ -367,12 +358,12 @@ class QGISLightPlugin:
                 self.log(f"Panel {item['name']} not found.", "warning")
                 continue
 
-            area = self.toEnum(Qt.DockWidgetArea, item["area"])
+            area = Qt.DockWidgetArea(item["area"])
             if self.mainwindow.dockWidgetArea(panel) != area:
                 self.mainwindow.addDockWidget(area, panel)
 
             panel.setFeatures(
-                self.toEnum(QDockWidget.DockWidgetFeature, item["features"])
+                QDockWidget.DockWidgetFeature(item["features"])
             )
 
             if item["hidden"]:
@@ -400,14 +391,19 @@ class QGISLightPlugin:
         self.mainwindow.setContextMenuPolicy(Qt.ContextMenuPolicy.DefaultContextMenu)
 
         # Remove simplified toolbars
-        for name in self.config["toolbars"]:
+        for name, item in self.config["toolbars"].items():
             toolbar = self.mainwindow.findChild(QToolBar, name)
             if not toolbar:
                 self.log(f"Toolbar {name} not found.", "warning")
-                continue
-            self.mainwindow.removeToolBar(toolbar)
-            toolbar.deleteLater()
-            self.log(f"Toolbar {name} removed.")
+            elif not isinstance(item, dict):
+                toolbar.hide()
+                toolbar.setFloatable(True)
+                toolbar.setMovable(True)
+                toolbar.toggleViewAction().setDisabled(False)
+            else:
+                self.mainwindow.removeToolBar(toolbar)
+                toolbar.deleteLater()
+                self.log(f"Toolbar {name} removed.")
 
         # Restore layout
         self.restoreLayout()
@@ -453,12 +449,12 @@ class QGISLightPlugin:
         for toolbar in self.mainwindow.findChildren(QToolBar):
             if toolbar.parent() == self.mainwindow and not toolbar.isHidden():
                 name = toolbar.objectName()
-                if name in self.config["toolbars"]:
+                if isinstance(self.config["toolbars"].get(name), dict):
                     continue
                 items.append(
                     {
                         "name": name,
-                        "area": self.mainwindow.toolBarArea(toolbar),
+                        "area": self.enumValue(self.mainwindow.toolBarArea(toolbar)),
                     }
                 )
                 toolbar.hide()
@@ -466,23 +462,32 @@ class QGISLightPlugin:
 
         if store:
             self.settings.setValue("qgislight/toolbars", items)
+            self.settings.sync()
 
         for name, item in self.config["toolbars"].items():
             toolbar = self.mainwindow.findChild(QToolBar, name)
             if toolbar:
-                self.log(f"Toolbar {name} exists, skipping.")
+                if not isinstance(item, dict):
+                    area = item
+                else:
+                    self.log(f"Toolbar {name} exists, skipping.")
+                    continue
+            elif not isinstance(item, dict):
+                self.log(f"Toolbar {name} not found.", "warning")
                 continue
-            self.log(f"Creating toolbar {name}.")
-            toolbar = QToolBar(item["title"], self.mainwindow)
-            toolbar.setObjectName(name)
+            else:
+                self.log(f"Creating toolbar {name}.")
+                toolbar = QToolBar(item["title"], self.mainwindow)
+                toolbar.setObjectName(name)
+                self.addItems(toolbar, item["items"])
+                area = item["area"]
+            self.mainwindow.addToolBar(
+                self._toolbar_areas.get(area, Qt.ToolBarArea.TopToolBarArea),
+                toolbar,
+            )
             toolbar.setFloatable(False)
             toolbar.setMovable(False)
             toolbar.toggleViewAction().setDisabled(True)
-            self.mainwindow.addToolBar(
-                self._toolbar_areas.get(item["area"], Qt.ToolBarArea.TopToolBarArea),
-                toolbar,
-            )
-            self.addItems(toolbar, item["items"])
             toolbar.show()
 
         # Set up panels
@@ -494,8 +499,8 @@ class QGISLightPlugin:
             items.append(
                 {
                     "name": name,
-                    "area": self.mainwindow.dockWidgetArea(panel),
-                    "features": panel.features(),
+                    "area": self.enumValue(self.mainwindow.dockWidgetArea(panel)),
+                    "features": self.enumValue(panel.features()),
                     "hidden": panel.isHidden(),
                 }
             )
@@ -521,6 +526,7 @@ class QGISLightPlugin:
 
         if store:
             self.settings.setValue("qgislight/panels", items)
+            self.settings.sync()
 
         # Set up data source manager providers
         providers = self.config.get("providers", {}).get("data_sources", [])
