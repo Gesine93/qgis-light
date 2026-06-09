@@ -1,15 +1,8 @@
 import os.path
 import json
 
-from qgis.core import (
-    Qgis,
-    QgsApplication,
-    QgsSettings
-)
-from qgis.gui import (
-    QgisInterface,
-    QgsGui
-)
+from qgis.core import Qgis, QgsApplication, QgsSettings
+from qgis.gui import QgisInterface, QgsGui
 from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import (
@@ -19,7 +12,7 @@ from qgis.PyQt.QtWidgets import (
     QToolBar,
     QToolButton,
     QWidget,
-    QWidgetAction
+    QWidgetAction,
 )
 
 from processing import execAlgorithmDialog
@@ -51,7 +44,6 @@ class QGISLightPlugin:
         "right": Qt.DockWidgetArea.RightDockWidgetArea,
     }
 
-
     def __init__(self, iface: QgisInterface):
         """Initializes the plugin.
 
@@ -76,7 +68,6 @@ class QGISLightPlugin:
             self.config = json.load(file)
         self.log("Configuration loaded.")
 
-
     def log(self, message: str, level: str = "info"):
         """Logs a message to the log panel.
 
@@ -88,7 +79,6 @@ class QGISLightPlugin:
             message, "QGIS Light", self._message_levels.get(level, "info")
         )
 
-
     def message(self, message: str, level: str = "info"):
         """Displays a message in the message bar.
 
@@ -99,7 +89,6 @@ class QGISLightPlugin:
         self.iface.messageBar().pushMessage(
             "QGIS Light", message, self._message_levels.get(level, "info")
         )
-
 
     @staticmethod
     def associatedObjects(action: QAction) -> list:
@@ -117,7 +106,6 @@ class QGISLightPlugin:
         if hasattr(action, "associatedObjects"):
             return action.associatedObjects()
         return action.associatedWidgets()
-
 
     @staticmethod
     def toEnum(enum_type, value):
@@ -138,8 +126,7 @@ class QGISLightPlugin:
             return value
         return enum_type(value)
 
-
-    def getProviders(self, name: bool=False) -> list[str]:
+    def getProviders(self, name: bool = False) -> list[str]:
         """Returns list of processing providers.
 
         Args:
@@ -153,7 +140,6 @@ class QGISLightPlugin:
             for provider in QgsApplication.processingRegistry().providers()
         ]
 
-
     def getAlgorithms(self) -> list:
         """Returns list of processing algorithms.
 
@@ -163,15 +149,16 @@ class QGISLightPlugin:
         algorithms = []
 
         for provider in QgsApplication.processingRegistry().providers():
-          for algorithm in provider.algorithms():
-            algorithms.append({
-                'id': algorithm.id(),
-                'group': algorithm.group(),
-                'name': algorithm.displayName()
-            })
+            for algorithm in provider.algorithms():
+                algorithms.append(
+                    {
+                        "id": algorithm.id(),
+                        "group": algorithm.group(),
+                        "name": algorithm.displayName(),
+                    }
+                )
 
         return algorithms
-
 
     def getDataItemProviders(self) -> list:
         """Returns list of data item providers.
@@ -184,7 +171,6 @@ class QGISLightPlugin:
             for provider in QgsApplication.dataItemProviderRegistry().providers()
         ]
 
-
     def getDataSourceProviders(self) -> list:
         """Returns list of data source providers.
 
@@ -195,7 +181,6 @@ class QGISLightPlugin:
             provider.name()
             for provider in QgsGui.sourceSelectProviderRegistry().providers()
         ]
-
 
     def findAction(self, widget: QWidget, id: str) -> QAction:
         """Finds action with the specified identifier.
@@ -210,7 +195,6 @@ class QGISLightPlugin:
             Action object if found, None otherwise.
         """
         for action in widget.actions():
-
             if isinstance(action, QWidgetAction):
                 action = self.findAction(action.defaultWidget(), id)
 
@@ -225,7 +209,6 @@ class QGISLightPlugin:
 
             if action:
                 return action
-
 
     def getItems(self, token: str) -> list:
         """Returns objects indicated by the identifier token.
@@ -305,7 +288,6 @@ class QGISLightPlugin:
         self.log(f"Invalid identifier token {token}.")
         return []
 
-
     def addItems(self, parent: QWidget, items: list):
         """Adds items to the associated parent object.
 
@@ -314,7 +296,6 @@ class QGISLightPlugin:
             items (list): List of items.
         """
         for item in items:
-
             if item == "separator":
                 parent.addSeparator()
 
@@ -342,7 +323,9 @@ class QGISLightPlugin:
                 else:
                     toolbutton = QToolButton(self.mainwindow)
                     toolbutton.setMenu(item)
-                    toolbutton.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
+                    toolbutton.setPopupMode(
+                        QToolButton.ToolButtonPopupMode.MenuButtonPopup
+                    )
                     toolbutton.setDefaultAction(item.actions()[0])
                     item.triggered.connect(toolbutton.setDefaultAction)
                     parent.addWidget(toolbutton)
@@ -352,7 +335,6 @@ class QGISLightPlugin:
 
             else:
                 self.log(f"Invalid item {item}.", "warning")
-
 
     def restoreLayout(self):
         """Restores layout of the user interface.
@@ -365,7 +347,6 @@ class QGISLightPlugin:
         # Restore toolbars
         items = self.settings.value("qgislight/toolbars", [])
         for item in items:
-
             toolbar = self.mainwindow.findChild(QToolBar, item["name"])
             if not toolbar:
                 self.log(f"Toolbar {item['name']} not found.", "warning")
@@ -381,7 +362,6 @@ class QGISLightPlugin:
         # Restore panels
         items = self.settings.value("qgislight/panels", [])
         for item in items:
-
             panel = self.mainwindow.findChild(QDockWidget, item["name"])
             if not panel:
                 self.log(f"Panel {item['name']} not found.", "warning")
@@ -391,13 +371,14 @@ class QGISLightPlugin:
             if self.mainwindow.dockWidgetArea(panel) != area:
                 self.mainwindow.addDockWidget(area, panel)
 
-            panel.setFeatures(self.toEnum(QDockWidget.DockWidgetFeature, item["features"]))
+            panel.setFeatures(
+                self.toEnum(QDockWidget.DockWidgetFeature, item["features"])
+            )
 
             if item["hidden"]:
                 panel.hide()
             else:
                 panel.show()
-
 
     def disable(self, store: bool = False):
         """Disables simplifications.
@@ -448,7 +429,6 @@ class QGISLightPlugin:
             if not state:
                 widget.show()
 
-
     def enable(self, store: bool = False):
         """Enables simplifications.
 
@@ -473,10 +453,12 @@ class QGISLightPlugin:
         for toolbar in self.mainwindow.findChildren(QToolBar):
             if toolbar.parent() == self.mainwindow and not toolbar.isHidden():
                 name = toolbar.objectName()
-                items.append({
-                    "name": name,
-                    "area": self.mainwindow.toolBarArea(toolbar),
-                })
+                items.append(
+                    {
+                        "name": name,
+                        "area": self.mainwindow.toolBarArea(toolbar),
+                    }
+                )
                 toolbar.hide()
                 self.log(f"Toolbar {name} is hidden.")
 
@@ -492,7 +474,7 @@ class QGISLightPlugin:
             toolbar.toggleViewAction().setDisabled(True)
             self.mainwindow.addToolBar(
                 self._toolbar_areas.get(item["area"], Qt.ToolBarArea.TopToolBarArea),
-                toolbar
+                toolbar,
             )
             self.addItems(toolbar, item["items"])
             toolbar.show()
@@ -503,12 +485,14 @@ class QGISLightPlugin:
 
         for panel in self.mainwindow.findChildren(QDockWidget):
             name = panel.objectName()
-            items.append({
-                "name": name,
-                "area": self.mainwindow.dockWidgetArea(panel),
-                "features": panel.features(),
-                "hidden": panel.isHidden(),
-            })
+            items.append(
+                {
+                    "name": name,
+                    "area": self.mainwindow.dockWidgetArea(panel),
+                    "features": panel.features(),
+                    "hidden": panel.isHidden(),
+                }
+            )
             if name not in panels and not panel.isHidden():
                 panel.hide()
                 self.log(f"Panel {name} is hidden.")
@@ -520,8 +504,7 @@ class QGISLightPlugin:
                 continue
             state, area = panels[name].split(":", 1)
             self.mainwindow.addDockWidget(
-                self._panel_areas.get(area, Qt.DockWidgetArea.LeftDockWidgetArea),
-                panel
+                self._panel_areas.get(area, Qt.DockWidgetArea.LeftDockWidgetArea), panel
             )
             if state == "fixed":
                 panel.setFeatures(QDockWidget.DockWidgetFeature.NoDockWidgetFeatures)
@@ -558,7 +541,6 @@ class QGISLightPlugin:
             if not state:
                 widget.hide()
 
-
     def initGui(self):
         """Initializes plugin user interface."""
         self.log("Initializing user interface.")
@@ -587,7 +569,6 @@ class QGISLightPlugin:
 
         # Add action to the view menu
         self.iface.viewMenu().addAction(action)
-
 
     def unload(self):
         """Unloads plugin."""
