@@ -37,18 +37,18 @@ class QGISLightPlugin:
 
     # Toolbar areas
     _toolbar_areas = {
-        "top": Qt.TopToolBarArea,
-        "bottom": Qt.BottomToolBarArea,
-        "left": Qt.LeftToolBarArea,
-        "right": Qt.RightToolBarArea,
+        "top": Qt.ToolBarArea.TopToolBarArea,
+        "bottom": Qt.ToolBarArea.BottomToolBarArea,
+        "left": Qt.ToolBarArea.LeftToolBarArea,
+        "right": Qt.ToolBarArea.RightToolBarArea,
     }
 
     # Panel areas
     _panel_areas = {
-        "top": Qt.TopDockWidgetArea,
-        "bottom": Qt.BottomDockWidgetArea,
-        "left": Qt.LeftDockWidgetArea,
-        "right": Qt.RightDockWidgetArea,
+        "top": Qt.DockWidgetArea.TopDockWidgetArea,
+        "bottom": Qt.DockWidgetArea.BottomDockWidgetArea,
+        "left": Qt.DockWidgetArea.LeftDockWidgetArea,
+        "right": Qt.DockWidgetArea.RightDockWidgetArea,
     }
 
 
@@ -99,6 +99,44 @@ class QGISLightPlugin:
         self.iface.messageBar().pushMessage(
             "QGIS Light", message, self._message_levels.get(level, "info")
         )
+
+
+    @staticmethod
+    def associatedObjects(action: QAction) -> list:
+        """Returns objects associated with an action.
+
+        Bridges a Qt version difference: QAction.associatedWidgets() was
+        renamed to associatedObjects() when QAction moved to QtGui in Qt6.
+
+        Args:
+            action (QAction): Action object.
+
+        Returns:
+            List of associated objects.
+        """
+        if hasattr(action, "associatedObjects"):
+            return action.associatedObjects()
+        return action.associatedWidgets()
+
+
+    @staticmethod
+    def toEnum(enum_type, value):
+        """Coerces a value read from settings to a Qt enum type.
+
+        QgsSettings preserves Qt enum types under Qt6 but returns plain
+        integers under Qt5, so stored toolbar/panel areas and feature flags
+        must be normalized before they are passed back to Qt.
+
+        Args:
+            enum_type: Target Qt enum or flag type.
+            value: Value read from settings (an enum/flag or an integer).
+
+        Returns:
+            The value as an instance of enum_type.
+        """
+        if isinstance(value, enum_type):
+            return value
+        return enum_type(value)
 
 
     def getProviders(self, name: bool=False) -> list[str]:
@@ -235,7 +273,7 @@ class QGISLightPlugin:
             toolbutton = QToolButton(self.mainwindow)
             toolbutton.setIcon(QIcon(algorithms["icon"]))
             toolbutton.setMenu(menu)
-            toolbutton.setPopupMode(QToolButton.MenuButtonPopup)
+            toolbutton.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
 
             return [toolbutton]
 
@@ -256,11 +294,11 @@ class QGISLightPlugin:
             if not wildcard:
                 return [action]
 
-            for widget in action.associatedWidgets():
+            for widget in self.associatedObjects(action):
                 if isinstance(widget, QToolButton):
                     return [widget.menu()] if widget.menu() else widget.actions()
 
-            for widget in action.associatedWidgets():
+            for widget in self.associatedObjects(action):
                 if isinstance(widget, QMenu):
                     return [widget]
 
@@ -304,7 +342,7 @@ class QGISLightPlugin:
                 else:
                     toolbutton = QToolButton(self.mainwindow)
                     toolbutton.setMenu(item)
-                    toolbutton.setPopupMode(QToolButton.MenuButtonPopup)
+                    toolbutton.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
                     toolbutton.setDefaultAction(item.actions()[0])
                     item.triggered.connect(toolbutton.setDefaultAction)
                     parent.addWidget(toolbutton)
@@ -333,8 +371,9 @@ class QGISLightPlugin:
                 self.log(f"Toolbar {item['name']} not found.", "warning")
                 continue
 
-            if self.mainwindow.toolBarArea(toolbar) != item["area"]:
-                self.mainwindow.addToolBar(item["area"], toolbar)
+            area = self.toEnum(Qt.ToolBarArea, item["area"])
+            if self.mainwindow.toolBarArea(toolbar) != area:
+                self.mainwindow.addToolBar(area, toolbar)
 
             toolbar.show()
             self.log(f"Toolbar {item['name']} is visible.")
@@ -348,10 +387,11 @@ class QGISLightPlugin:
                 self.log(f"Panel {item['name']} not found.", "warning")
                 continue
 
-            if self.mainwindow.dockWidgetArea(panel) != item["area"]:
-                self.mainwindow.addDockWidget(item["area"], panel)
+            area = self.toEnum(Qt.DockWidgetArea, item["area"])
+            if self.mainwindow.dockWidgetArea(panel) != area:
+                self.mainwindow.addDockWidget(area, panel)
 
-            panel.setFeatures(QDockWidget.DockWidgetFeatures(item["features"]))
+            panel.setFeatures(self.toEnum(QDockWidget.DockWidgetFeature, item["features"]))
 
             if item["hidden"]:
                 panel.hide()
@@ -376,7 +416,7 @@ class QGISLightPlugin:
         self.mainwindow.menuBar().show()
 
         # Enable contextual menu
-        self.mainwindow.setContextMenuPolicy(Qt.DefaultContextMenu)
+        self.mainwindow.setContextMenuPolicy(Qt.ContextMenuPolicy.DefaultContextMenu)
 
         # Remove simplified toolbars
         for name in self.config["toolbars"]:
@@ -425,7 +465,7 @@ class QGISLightPlugin:
         self.mainwindow.menuBar().hide()
 
         # Disable contextual menu
-        self.mainwindow.setContextMenuPolicy(Qt.NoContextMenu)
+        self.mainwindow.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
 
         # Set up toolbars
         items = []
@@ -451,7 +491,7 @@ class QGISLightPlugin:
             toolbar.setMovable(False)
             toolbar.toggleViewAction().setDisabled(True)
             self.mainwindow.addToolBar(
-                self._toolbar_areas.get(item["area"], Qt.TopToolBarArea),
+                self._toolbar_areas.get(item["area"], Qt.ToolBarArea.TopToolBarArea),
                 toolbar
             )
             self.addItems(toolbar, item["items"])
@@ -480,11 +520,11 @@ class QGISLightPlugin:
                 continue
             state, area = panels[name].split(":", 1)
             self.mainwindow.addDockWidget(
-                self._panel_areas.get(area, Qt.LeftDockWidgetArea),
+                self._panel_areas.get(area, Qt.DockWidgetArea.LeftDockWidgetArea),
                 panel
             )
             if state == "fixed":
-                panel.setFeatures(QDockWidget.NoDockWidgetFeatures)
+                panel.setFeatures(QDockWidget.DockWidgetFeature.NoDockWidgetFeatures)
                 panel.show()
             elif state == "hidden":
                 panel.hide()
@@ -558,6 +598,6 @@ class QGISLightPlugin:
         # Remove enable simplifications action if required
         action = self.mainwindow.findChild(QAction, "mActionToggleQGISLight")
         if action:
-            for widget in action.associatedWidgets():
+            for widget in self.associatedObjects(action):
                 widget.removeAction(action)
             action.deleteLater()
