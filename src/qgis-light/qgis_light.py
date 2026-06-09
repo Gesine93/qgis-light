@@ -1,9 +1,9 @@
 import os.path
 import json
 
-from qgis.core import Qgis, QgsApplication, QgsSettings
+from qgis.core import Qgis, QgsApplication, QgsProject, QgsSettings
 from qgis.gui import QgisInterface, QgsGui
-from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtCore import Qt, QTimer
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import (
     QAction,
@@ -453,6 +453,8 @@ class QGISLightPlugin:
         for toolbar in self.mainwindow.findChildren(QToolBar):
             if toolbar.parent() == self.mainwindow and not toolbar.isHidden():
                 name = toolbar.objectName()
+                if name in self.config["toolbars"]:
+                    continue
                 items.append(
                     {
                         "name": name,
@@ -466,6 +468,10 @@ class QGISLightPlugin:
             self.settings.setValue("qgislight/toolbars", items)
 
         for name, item in self.config["toolbars"].items():
+            toolbar = self.mainwindow.findChild(QToolBar, name)
+            if toolbar:
+                self.log(f"Toolbar {name} exists, skipping.")
+                continue
             self.log(f"Creating toolbar {name}.")
             toolbar = QToolBar(item["title"], self.mainwindow)
             toolbar.setObjectName(name)
@@ -541,21 +547,29 @@ class QGISLightPlugin:
             if not state:
                 widget.hide()
 
-    def initGui(self):
-        """Initializes plugin user interface."""
-        self.log("Initializing user interface.")
-
+    def refresh(self):
+        """Refreshes simplifications."""
         # Get enabled flag
         enabled = self.settings.value("qgislight/enabled")
         self.log(f"Enabled flag is {enabled}.")
 
         # Check if simplifications are enabled
         if enabled == "true":
-            # Connect to initializationCompleted signal to delay initialization.
-            #
-            # This is required to have access to the final states of toolbars
-            # and panels as modified by loaded plugins.
-            self.mainwindow.initializationCompleted.connect(self.enable)
+            # Delay enabling until UI restore is finished
+            QTimer.singleShot(0, self.enable)
+
+    def initGui(self):
+        """Initializes plugin user interface."""
+        self.log("Initializing user interface.")
+
+        # Connect to initializationCompleted signal to delay initialization.
+        #
+        # This is required to have access to the final states of toolbars
+        # and panels as modified by loaded plugins.
+        self.mainwindow.initializationCompleted.connect(self.refresh)
+
+        # Connect to readProject signal to refresh simplifications
+        QgsProject.instance().readProject.connect(self.refresh)
 
         # Create enable simplifications action
         action = QAction(self.mainwindow)
