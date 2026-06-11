@@ -3,18 +3,9 @@ import json
 import psycopg2
 import psycopg2.extras
 
-from qgis.core import (
-    Qgis,
-    QgsApplication,
-    QgsAuthMethodConfig,
-    QgsSettings,
-    QgsProject
-)
-from qgis.gui import (
-    QgisInterface,
-    QgsGui
-)
-from qgis.PyQt.QtCore import Qt
+from qgis.core import Qgis, QgsApplication, QgsAuthMethodConfig, QgsProject, QgsSettings
+from qgis.gui import QgisInterface, QgsGui
+from qgis.PyQt.QtCore import Qt, QTimer
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import (
     QAction,
@@ -23,12 +14,10 @@ from qgis.PyQt.QtWidgets import (
     QToolBar,
     QToolButton,
     QWidget,
-    QWidgetAction
+    QWidgetAction,
 )
 
-
 from processing import execAlgorithmDialog
-from urllib.parse import quote 
 
 
 class QGISLightPlugin:
@@ -39,98 +28,75 @@ class QGISLightPlugin:
         "info": Qgis.MessageLevel.Info,
         "warning": Qgis.MessageLevel.Warning,
         "error": Qgis.MessageLevel.Critical,
-        "success": Qgis.Success
     }
 
     # Toolbar areas
     _toolbar_areas = {
-        "top": Qt.TopToolBarArea,
-        "bottom": Qt.BottomToolBarArea,
-        "left": Qt.LeftToolBarArea,
-        "right": Qt.RightToolBarArea,
+        "top": Qt.ToolBarArea.TopToolBarArea,
+        "bottom": Qt.ToolBarArea.BottomToolBarArea,
+        "left": Qt.ToolBarArea.LeftToolBarArea,
+        "right": Qt.ToolBarArea.RightToolBarArea,
     }
 
     # Panel areas
     _panel_areas = {
-        "top": Qt.TopDockWidgetArea,
-        "bottom": Qt.BottomDockWidgetArea,
-        "left": Qt.LeftDockWidgetArea,
-        "right": Qt.RightDockWidgetArea,
+        "top": Qt.DockWidgetArea.TopDockWidgetArea,
+        "bottom": Qt.DockWidgetArea.BottomDockWidgetArea,
+        "left": Qt.DockWidgetArea.LeftDockWidgetArea,
+        "right": Qt.DockWidgetArea.RightDockWidgetArea,
     }
 
-
     def __init__(self, iface: QgisInterface):
-        """Initializes the plugin."""
+        """Initializes the plugin.
 
-        # Interface
+        Args:
+            iface (QgisInterface): QGIS interface object.
+        """
+        # Set interface
         self.iface = iface
+
+        # Get main window
         self.mainwindow = iface.mainWindow()
+
+        # Get settings
         self.settings = QgsSettings()
 
-        # Plugin directory
+        # Get plugin directory
         self.plugin_dir = os.path.dirname(os.path.realpath(__file__))
-        self.log(f"Plugin directory is {self.plugin_dir}")
+        self.log(f"Plugin directory is {self.plugin_dir}.")
 
         # Defaults
         self.user = None
         self.matched_roles = []
 
         # Default config
-        self.standard_config_path = os.path.join(
-            self.plugin_dir,
-            "config.json"
-        )
+        self.standard_config_path = os.path.join(self.plugin_dir, "config.json")
 
         # JSON paths
-        connections_path = os.path.join(
-            self.plugin_dir,
-            "connections.json"
-        )
+        connections_path = os.path.join(self.plugin_dir, "connections.json")
 
-        roles_path = os.path.join(
-            self.plugin_dir,
-            "roles.json"
-        )
+        roles_path = os.path.join(self.plugin_dir, "roles.json")
 
-        users_path = os.path.join(
-            self.plugin_dir,
-            "users.json"
-        )
+        users_path = os.path.join(self.plugin_dir, "users.json")
 
-        projects_path = os.path.join(
-            self.plugin_dir,
-            "projects.json"
-        )
+        projects_path = os.path.join(self.plugin_dir, "projects.json")
 
         # Load mapping JSONs
         self.connection_cfg = self._load_json(
-            connections_path,
-            label="Verbindungsparameter"
+            connections_path, label="Verbindungsparameter"
         )
 
-        self.roles_cfg = self._load_json(
-            roles_path,
-            label="DB Role Mapping"
-        )
+        self.roles_cfg = self._load_json(roles_path, label="DB Role Mapping")
 
-        self.users_cfg = self._load_json(
-            users_path,
-            label="User Mapping"
-        )
+        self.users_cfg = self._load_json(users_path, label="User Mapping")
 
-        self.projects_cfg = self._load_json(
-            projects_path,
-            label="Project Mapping"
-        )
+        self.projects_cfg = self._load_json(projects_path, label="Project Mapping")
 
         # Resolve config
         config_path = self.resolve_config()
 
         if config_path == self.standard_config_path:
-            self.log(
-                "No specific mapping found – using default configuration.",
-                "info"
-            )
+            self.log("No specific mapping found – using default configuration.")
 
         # active config path
         self.config_path = config_path
@@ -144,10 +110,7 @@ class QGISLightPlugin:
     def resolve_config(self) -> str:
         """Resolve active config path."""
 
-        standard_config_path = os.path.join(
-            self.plugin_dir,
-            "config.json"
-        )
+        standard_config_path = os.path.join(self.plugin_dir, "config.json")
 
         config_path = standard_config_path
 
@@ -159,11 +122,8 @@ class QGISLightPlugin:
 
         # 2 role
         if self.connection_cfg and self.roles_cfg:
-
             resolved = self._resolve_config_by_role(
-                self.connection_cfg,
-                self.roles_cfg,
-                fallback_path=None
+                self.connection_cfg, self.roles_cfg, fallback_path=None
             )
 
             if resolved:
@@ -171,16 +131,12 @@ class QGISLightPlugin:
 
         # 3 project
         if self.projects_cfg:
-
-            resolved = self._resolve_config_by_project(
-                self.projects_cfg
-            )
+            resolved = self._resolve_config_by_project(self.projects_cfg)
 
             if resolved:
                 return resolved
 
         return config_path
-
 
     def _load_json(self, path: str, label: str = "JSON") -> dict | None:
         """Loads a JSON file and returns its content.
@@ -219,14 +175,13 @@ class QGISLightPlugin:
             manager.loadAuthenticationConfig(auth_id, auth_method_cfg, True)
             return auth_method_cfg.configMap().get("username")
         except Exception as e:
-            self.log(f"Username could not be read from the Auth Manager: {e}", "warning")
+            self.log(
+                f"Username could not be read from the Auth Manager: {e}", "warning"
+            )
             return None
 
     def _resolve_config_by_role(
-        self,
-        connection_cfg: dict,
-        roles_cfg: dict,
-        fallback_path: str | None
+        self, connection_cfg: dict, roles_cfg: dict, fallback_path: str | None
     ) -> str | None:
         """
         Checks the database roles of the current user and returns the corresponding config path.
@@ -245,7 +200,9 @@ class QGISLightPlugin:
             manager = QgsApplication.authManager()
             auth_ids = manager.availableAuthMethodConfigs()
             if not auth_ids:
-                self.log("No authentication stored in QGIS – role check skipped.", "warning")
+                self.log(
+                    "No authentication stored in QGIS – role check skipped.", "warning"
+                )
                 return fallback_path
 
             auth_id = list(auth_ids.keys())[0]
@@ -261,15 +218,23 @@ class QGISLightPlugin:
             dbname = connection_cfg.get("dbname")
 
             if not host or not port or not dbname:
-                self.log("Verbindungsparameter unvollständig – Rollenprüfung übersprungen.", "warning")
+                self.log(
+                    "Verbindungsparameter unvollständig – Rollenprüfung übersprungen.",
+                    "warning",
+                )
                 return fallback_path
 
             # roles
             role_entries: list[dict] = roles_cfg.get("roles", [])
-            role_names = [entry["rolname"] for entry in role_entries if "rolname" in entry]
+            role_names = [
+                entry["rolname"] for entry in role_entries if "rolname" in entry
+            ]
 
             if not role_names:
-                self.log("Keine Rollen in roles.json definiert – Rollenprüfung übersprungen.", "warning")
+                self.log(
+                    "Keine Rollen in roles.json definiert – Rollenprüfung übersprungen.",
+                    "warning",
+                )
                 return fallback_path
 
             # prepare SQL
@@ -282,13 +247,9 @@ class QGISLightPlugin:
                 AND r1.rolname = ANY(%s)
             """
 
-            # DB-connection with psycopg2 
+            # DB-connection with psycopg2
             conn = psycopg2.connect(
-                host=host,
-                port=port,
-                dbname=dbname,
-                user=user,
-                password=password
+                host=host, port=port, dbname=dbname, user=user, password=password
             )
             cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
             cur.execute(sql, (user, role_names))
@@ -298,7 +259,7 @@ class QGISLightPlugin:
             self.matched_roles = [row["rolname"] for row in rows]
 
             if not self.matched_roles:
-                self.log(f"User '{user}' does not have any of the configured roles.", "info")
+                self.log(f"User '{user}' does not have any of the configured roles.")
                 return fallback_path
 
             self.log(f"User '{user}' – found roles: {self.matched_roles}")
@@ -312,17 +273,23 @@ class QGISLightPlugin:
                         self.log(f"Role-based config found: {cfg_path}")
                         return cfg_path
                     else:
-                        self.log(f"Config path for role '{entry['rolname']}' not found: {cfg_path}", "warning")
+                        self.log(
+                            f"Config path for role '{entry['rolname']}' not found: {cfg_path}",
+                            "warning",
+                        )
 
-            self.log("No valid role-based config – continuing with next step.", "warning")
+            self.log(
+                "No valid role-based config – continuing with next step.", "warning"
+            )
             return fallback_path
 
         except Exception as e:
             import traceback
+
             self.log(f"Role check failed: {e}", "error")
             self.log(traceback.format_exc(), "error")
             return fallback_path
-    
+
     def _resolve_config_by_user(self, users_cfg: dict) -> str | None:
         """Returns config path based on users.json."""
 
@@ -335,24 +302,25 @@ class QGISLightPlugin:
         if not self.user:
             self.log("No username available for users.json.", "warning")
             return None
- 
+
         user_entries = users_cfg.get("users", [])
 
         for entry in user_entries:
             usernames = entry.get("usernames", [])
-            
+
             if self.user in usernames:
                 cfg_path = entry.get("config_path")
                 if cfg_path and os.path.isfile(cfg_path):
                     self.log(f"User-based config found: {cfg_path}")
                     return cfg_path
                 else:
-                    self.log(f"Config for user '{self.user}' is invalid: {cfg_path}", "warning")
+                    self.log(
+                        f"Config for user '{self.user}' is invalid: {cfg_path}",
+                        "warning",
+                    )
 
-        self.log(f"No entry for user '{self.user}' in users.json.", "info")
+        self.log(f"No entry for user '{self.user}' in users.json.")
         return None
-    
-
 
     def _resolve_config_by_project(self, projects_cfg: dict) -> str | None:
         """Returns config path based on current QGIS project."""
@@ -366,7 +334,7 @@ class QGISLightPlugin:
             project_path = project.fileName()
 
             if not project_path:
-                self.log("No QGIS project loaded.", "info")
+                self.log("No QGIS project loaded.")
                 return None
 
             project_name = os.path.basename(project_path)
@@ -376,11 +344,9 @@ class QGISLightPlugin:
             project_entries = projects_cfg.get("projects", [])
 
             for entry in project_entries:
-
                 names = entry.get("project_names", [])
 
                 if project_name in names:
-
                     cfg_path = entry.get("config_path")
 
                     if cfg_path and os.path.isfile(cfg_path):
@@ -390,16 +356,15 @@ class QGISLightPlugin:
                     else:
                         self.log(
                             f"Invalid config for project '{project_name}': {cfg_path}",
-                            "warning"
+                            "warning",
                         )
 
-            self.log(f"No project mapping found for '{project_name}'.", "info")
+            self.log(f"No project mapping found for '{project_name}'.")
             return None
 
         except Exception as e:
             self.log(f"Project mapping failed: {e}", "error")
             return None
-        
 
     def apply_config(self, config_path: str):
         """Loads config file."""
@@ -407,7 +372,6 @@ class QGISLightPlugin:
         self.config = {}
 
         try:
-
             with open(config_path, encoding="utf-8") as f:
                 self.config = json.load(f)
 
@@ -416,11 +380,8 @@ class QGISLightPlugin:
             self.log(f"Configuration loaded from {config_path}")
 
         except Exception as e:
-            self.log(
-                f"Couldn't load config file ({config_path}): {e}",
-                "error"
-            )
-        
+            self.log(f"Couldn't load config file ({config_path}): {e}", "error")
+
     def check_project_config(self, *args):
         """Re-resolve config after project change."""
 
@@ -428,7 +389,6 @@ class QGISLightPlugin:
 
         # already active
         if new_config == self.config_path:
-
             self.log("Correct config already active.")
             return
 
@@ -447,8 +407,6 @@ class QGISLightPlugin:
         if enabled:
             self.enable(store=False)
 
-
-
     def log(self, message: str, level: str = "info"):
         """Logs a message to the log panel.
 
@@ -459,7 +417,6 @@ class QGISLightPlugin:
         QgsApplication.messageLog().logMessage(
             message, "QGIS Light", self._message_levels.get(level, "info")
         )
-
 
     def message(self, message: str, level: str = "info"):
         """Displays a message in the message bar.
@@ -472,6 +429,88 @@ class QGISLightPlugin:
             "QGIS Light", message, self._message_levels.get(level, "info")
         )
 
+    @staticmethod
+    def associatedObjects(action: QAction) -> list:
+        """Returns objects associated with an action.
+
+        Bridges a Qt version difference: QAction.associatedWidgets() was
+        renamed to associatedObjects() when QAction moved to QtGui in Qt6.
+
+        Args:
+            action (QAction): Action object.
+
+        Returns:
+            List of associated objects.
+        """
+        if hasattr(action, "associatedObjects"):
+            return action.associatedObjects()
+        return action.associatedWidgets()
+
+    @staticmethod
+    def enumValue(enum):
+        """Returns value of a Qt enum type."""
+        if enum is None:
+            return None
+        elif hasattr(enum, "value"):
+            return enum.value
+        else:
+            return int(enum)
+
+    def getProviders(self, name: bool = False) -> list[str]:
+        """Returns list of processing providers.
+
+        Args:
+            name (bool): Set True to get provider names.
+
+        Returns:
+            List of processing providers.
+        """
+        return [
+            provider.name() if name else provider.id()
+            for provider in QgsApplication.processingRegistry().providers()
+        ]
+
+    def getAlgorithms(self) -> list:
+        """Returns list of processing algorithms.
+
+        Returns:
+            List of processing algorithms (id, group, name).
+        """
+        algorithms = []
+
+        for provider in QgsApplication.processingRegistry().providers():
+            for algorithm in provider.algorithms():
+                algorithms.append(
+                    {
+                        "id": algorithm.id(),
+                        "group": algorithm.group(),
+                        "name": algorithm.displayName(),
+                    }
+                )
+
+        return algorithms
+
+    def getDataItemProviders(self) -> list:
+        """Returns list of data item providers.
+
+        Returns:
+            List of data item providers.
+        """
+        return [
+            provider.name()
+            for provider in QgsApplication.dataItemProviderRegistry().providers()
+        ]
+
+    def getDataSourceProviders(self) -> list:
+        """Returns list of data source providers.
+
+        Returns:
+            List of data source providers.
+        """
+        return [
+            provider.name()
+            for provider in QgsGui.sourceSelectProviderRegistry().providers()
+        ]
 
     def findAction(self, widget: QWidget, id: str) -> QAction:
         """Finds action with the specified identifier.
@@ -486,15 +525,20 @@ class QGISLightPlugin:
             Action object if found, None otherwise.
         """
         for action in widget.actions():
-
             if isinstance(action, QWidgetAction):
                 action = self.findAction(action.defaultWidget(), id)
 
             elif id in [action.objectName(), action.text(), action.toolTip()]:
+                pass
+
+            elif action.menu():
+                action = self.findAction(action.menu(), id)
+
+            else:
+                continue
+
+            if action:
                 return action
-
-        return None
-
 
     def getItems(self, token: str) -> list:
         """Returns objects indicated by the identifier token.
@@ -542,7 +586,7 @@ class QGISLightPlugin:
             toolbutton = QToolButton(self.mainwindow)
             toolbutton.setIcon(QIcon(algorithms["icon"]))
             toolbutton.setMenu(menu)
-            toolbutton.setPopupMode(QToolButton.MenuButtonPopup)
+            toolbutton.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
 
             return [toolbutton]
 
@@ -563,17 +607,16 @@ class QGISLightPlugin:
             if not wildcard:
                 return [action]
 
-            for widget in action.associatedWidgets():
+            for widget in self.associatedObjects(action):
                 if isinstance(widget, QToolButton):
                     return [widget.menu()] if widget.menu() else widget.actions()
 
-            for widget in action.associatedWidgets():
+            for widget in self.associatedObjects(action):
                 if isinstance(widget, QMenu):
                     return [widget]
 
         self.log(f"Invalid identifier token {token}.")
         return []
-
 
     def addItems(self, parent: QWidget, items: list):
         """Adds items to the associated parent object.
@@ -583,7 +626,6 @@ class QGISLightPlugin:
             items (list): List of items.
         """
         for item in items:
-
             if item == "separator":
                 parent.addSeparator()
 
@@ -611,7 +653,9 @@ class QGISLightPlugin:
                 else:
                     toolbutton = QToolButton(self.mainwindow)
                     toolbutton.setMenu(item)
-                    toolbutton.setPopupMode(QToolButton.MenuButtonPopup)
+                    toolbutton.setPopupMode(
+                        QToolButton.ToolButtonPopupMode.MenuButtonPopup
+                    )
                     toolbutton.setDefaultAction(item.actions()[0])
                     item.triggered.connect(toolbutton.setDefaultAction)
                     parent.addWidget(toolbutton)
@@ -622,49 +666,25 @@ class QGISLightPlugin:
             else:
                 self.log(f"Invalid item {item}.", "warning")
 
-
-
-
-
-    def saveLayout(self):
-
-        # Save toolbars
-        items = []
-        for toolbar in self.mainwindow.findChildren(QToolBar):
-            if toolbar.parent() == self.mainwindow:
-                items.append({
-                    "name": toolbar.objectName(),
-                    "area": self.mainwindow.toolBarArea(toolbar),
-                })
-        self.settings.setValue("qgislight/toolbars", items)
-        self.log("Toolbars saved.")
-
-        # Save panels
-        items = []
-        for panel in self.mainwindow.findChildren(QDockWidget):
-            items.append({
-                "name": panel.objectName(),
-                "area": self.mainwindow.dockWidgetArea(panel),
-                "features": panel.features(),
-                "hidden": panel.isHidden(),
-            })
-        self.settings.setValue("qgislight/panels", items)
-        self.log("Panels saved.")
-
-
     def restoreLayout(self):
+        """Restores layout of the user interface.
+
+        Toolbars and panels are restored to the layout that was stored before
+        the simplifications were enabled.
+        """
+        self.log("Restoring user interface layout.")
 
         # Restore toolbars
         items = self.settings.value("qgislight/toolbars", [])
         for item in items:
-
             toolbar = self.mainwindow.findChild(QToolBar, item["name"])
             if not toolbar:
                 self.log(f"Toolbar {item['name']} not found.", "warning")
                 continue
 
-            if self.mainwindow.toolBarArea(toolbar) != item["area"]:
-                self.mainwindow.addToolBar(item["area"], toolbar)
+            area = Qt.ToolBarArea(item["area"])
+            if self.mainwindow.toolBarArea(toolbar) != area:
+                self.mainwindow.addToolBar(area, toolbar)
 
             toolbar.show()
             self.log(f"Toolbar {item['name']} is visible.")
@@ -672,22 +692,21 @@ class QGISLightPlugin:
         # Restore panels
         items = self.settings.value("qgislight/panels", [])
         for item in items:
-
             panel = self.mainwindow.findChild(QDockWidget, item["name"])
             if not panel:
                 self.log(f"Panel {item['name']} not found.", "warning")
                 continue
 
-            if self.mainwindow.dockWidgetArea(panel) != item["area"]:
-                self.mainwindow.addDockWidget(item["area"], panel)
+            area = Qt.DockWidgetArea(item["area"])
+            if self.mainwindow.dockWidgetArea(panel) != area:
+                self.mainwindow.addDockWidget(area, panel)
 
-            panel.setFeatures(QDockWidget.DockWidgetFeatures(item["features"]))
+            panel.setFeatures(QDockWidget.DockWidgetFeature(item["features"]))
 
             if item["hidden"]:
                 panel.hide()
             else:
                 panel.show()
-
 
     def disable(self, store: bool = False):
         """Disables simplifications.
@@ -706,17 +725,22 @@ class QGISLightPlugin:
         self.mainwindow.menuBar().show()
 
         # Enable contextual menu
-        self.mainwindow.setContextMenuPolicy(Qt.DefaultContextMenu)
+        self.mainwindow.setContextMenuPolicy(Qt.ContextMenuPolicy.DefaultContextMenu)
 
         # Remove simplified toolbars
-        for name in self.config["toolbars"]:
+        for name, item in self.config["toolbars"].items():
             toolbar = self.mainwindow.findChild(QToolBar, name)
             if not toolbar:
                 self.log(f"Toolbar {name} not found.", "warning")
-                continue
-            self.mainwindow.removeToolBar(toolbar)
-            toolbar.deleteLater()
-            self.log(f"Toolbar {name} removed.")
+            elif not isinstance(item, dict):
+                toolbar.hide()
+                toolbar.setFloatable(True)
+                toolbar.setMovable(True)
+                toolbar.toggleViewAction().setDisabled(False)
+            else:
+                self.mainwindow.removeToolBar(toolbar)
+                toolbar.deleteLater()
+                self.log(f"Toolbar {name} removed.")
 
         # Restore layout
         self.restoreLayout()
@@ -738,7 +762,6 @@ class QGISLightPlugin:
             if not state:
                 widget.show()
 
-
     def enable(self, store: bool = False):
         """Enables simplifications.
 
@@ -755,7 +778,7 @@ class QGISLightPlugin:
         self.mainwindow.menuBar().hide()
 
         # Disable contextual menu
-        self.mainwindow.setContextMenuPolicy(Qt.NoContextMenu)
+        self.mainwindow.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
 
         # Set up toolbars
         items = []
@@ -763,35 +786,46 @@ class QGISLightPlugin:
         for toolbar in self.mainwindow.findChildren(QToolBar):
             if toolbar.parent() == self.mainwindow and not toolbar.isHidden():
                 name = toolbar.objectName()
-                items.append({
-                    "name": name,
-                    "area": self.mainwindow.toolBarArea(toolbar),
-                })
+                if isinstance(self.config["toolbars"].get(name), dict):
+                    continue
+                items.append(
+                    {
+                        "name": name,
+                        "area": self.enumValue(self.mainwindow.toolBarArea(toolbar)),
+                    }
+                )
                 toolbar.hide()
                 self.log(f"Toolbar {name} is hidden.")
 
         if store:
             self.settings.setValue("qgislight/toolbars", items)
+            self.settings.sync()
 
         for name, item in self.config["toolbars"].items():
-            self.log(f"Creating toolbar {name}.")
-            toolbar = QToolBar(item["title"], self.mainwindow)
-            toolbar.setObjectName(name)
+            toolbar = self.mainwindow.findChild(QToolBar, name)
+            if toolbar:
+                if not isinstance(item, dict):
+                    area = item
+                else:
+                    self.log(f"Toolbar {name} exists, skipping.")
+                    continue
+            elif not isinstance(item, dict):
+                self.log(f"Toolbar {name} not found.", "warning")
+                continue
+            else:
+                self.log(f"Creating toolbar {name}.")
+                toolbar = QToolBar(item["title"], self.mainwindow)
+                toolbar.setObjectName(name)
+                self.addItems(toolbar, item["items"])
+                area = item["area"]
+            self.mainwindow.addToolBar(
+                self._toolbar_areas.get(area, Qt.ToolBarArea.TopToolBarArea),
+                toolbar,
+            )
             toolbar.setFloatable(False)
             toolbar.setMovable(False)
             toolbar.toggleViewAction().setDisabled(True)
-            self.mainwindow.addToolBar(
-                self._toolbar_areas.get(item["area"], Qt.TopToolBarArea),
-                toolbar
-            )
-            self.addItems(toolbar, item["items"])
             toolbar.show()
-
-        # Such-Plugin Discovery einblenden - TS
-        suche = self.mainwindow.findChild(QToolBar, "Discovery_Plugin")
-        if suche:
-            suche.show()
-            self.mainwindow.insertToolBar(suche, toolbar) # Discovery nach rechts
 
         # Set up panels
         panels = self.config.get("panels", {})
@@ -799,12 +833,14 @@ class QGISLightPlugin:
 
         for panel in self.mainwindow.findChildren(QDockWidget):
             name = panel.objectName()
-            items.append({
-                "name": name,
-                "area": self.mainwindow.dockWidgetArea(panel),
-                "features": panel.features(),
-                "hidden": panel.isHidden(),
-            })
+            items.append(
+                {
+                    "name": name,
+                    "area": self.enumValue(self.mainwindow.dockWidgetArea(panel)),
+                    "features": self.enumValue(panel.features()),
+                    "hidden": panel.isHidden(),
+                }
+            )
             if name not in panels and not panel.isHidden():
                 panel.hide()
                 self.log(f"Panel {name} is hidden.")
@@ -816,11 +852,10 @@ class QGISLightPlugin:
                 continue
             state, area = panels[name].split(":", 1)
             self.mainwindow.addDockWidget(
-                self._panel_areas.get(area, Qt.LeftDockWidgetArea),
-                panel
+                self._panel_areas.get(area, Qt.DockWidgetArea.LeftDockWidgetArea), panel
             )
             if state == "fixed":
-                panel.setFeatures(QDockWidget.NoDockWidgetFeatures)
+                panel.setFeatures(QDockWidget.DockWidgetFeature.NoDockWidgetFeatures)
                 panel.show()
             elif state == "hidden":
                 panel.hide()
@@ -828,6 +863,7 @@ class QGISLightPlugin:
 
         if store:
             self.settings.setValue("qgislight/panels", items)
+            self.settings.sync()
 
         # Set up data source manager providers
         providers = self.config.get("providers", {}).get("data_sources", [])
@@ -854,25 +890,10 @@ class QGISLightPlugin:
             if not state:
                 widget.hide()
 
-
-    def initGui(self):
-        """Initializes plugin user interface."""
-        # remove stale action from plugin reloads
-        existing = self.mainwindow.findChild(
-            QAction,
-            "mActionToggleQGISLight"
-        )
-
-        if existing:
-
-            self.log("Removing stale QGIS Light action.")
-
-            for widget in existing.associatedWidgets():
-                widget.removeAction(existing)
-
-            existing.deleteLater()
-        
-        self.log("Initializing user interface.")
+    def refresh(self):
+        """Refreshes simplifications."""
+        # Check project configuration
+        self.check_project_config()
 
         # Get enabled flag
         enabled = self.settings.value("qgislight/enabled")
@@ -880,11 +901,21 @@ class QGISLightPlugin:
 
         # Check if simplifications are enabled
         if enabled == "true":
-            # Connect to initializationCompleted signal to delay initialization.
-            #
-            # This is required to have access to the final states of toolbars
-            # and panels as modified by loaded plugins.
-            self.mainwindow.initializationCompleted.connect(self.enable)
+            # Delay enabling until UI restore is finished
+            QTimer.singleShot(0, self.enable)
+
+    def initGui(self):
+        """Initializes plugin user interface."""
+        self.log("Initializing user interface.")
+
+        # Connect to initializationCompleted signal to delay initialization.
+        #
+        # This is required to have access to the final states of toolbars
+        # and panels as modified by loaded plugins.
+        self.mainwindow.initializationCompleted.connect(self.refresh)
+
+        # Connect to readProject signal to refresh simplifications
+        QgsProject.instance().readProject.connect(self.refresh)
 
         # Create enable simplifications action
         action = QAction(self.mainwindow)
@@ -899,10 +930,6 @@ class QGISLightPlugin:
         # Add action to the view menu
         self.iface.viewMenu().addAction(action)
 
-        # signal for loading right config for project
-        QgsProject.instance().readProject.connect(self.check_project_config)
-
-
     def unload(self):
         """Unloads plugin."""
         # Disable simplifications if required
@@ -912,13 +939,11 @@ class QGISLightPlugin:
         # Remove enable simplifications action if required
         action = self.mainwindow.findChild(QAction, "mActionToggleQGISLight")
         if action:
-            for widget in action.associatedWidgets():
+            for widget in self.associatedObjects(action):
                 widget.removeAction(action)
             action.deleteLater()
-        
+
         try:
-            QgsProject.instance().readProject.disconnect(
-                self.check_project_config
-            )
+            QgsProject.instance().readProject.disconnect(self.refresh)
         except:
             pass
