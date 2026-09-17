@@ -1,5 +1,5 @@
 {
-  "_comment": "Role mapping: Which pgAdmin role gets which config? Order determines priority, first match wins.",
+  "_comment": "Role mapping: Which Postgres role gets which config? Order determines priority, first match wins.",
   "roles": [
     {
       "rolenames": [],
