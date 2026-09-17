@@ -252,7 +252,7 @@ will also facilitate initiatives like simplification.
 
 ## Create different configs for different users and/or user groups
 
-This feature was contributed by Gesine Fengler ([https://github.com/Gesine93](https://github.com/Gesine93)) and enables automatic loading of different configuration files based on the authenticated QGIS user or opened QGIS project.
+This feature was contributed by Gesine Fengler ([https://github.com/Gesine93](https://github.com/Gesine93)) and enables automatic loading of different configuration files based on the authenticated QGIS user or active QGIS project.
 
 This allows organizations to provide project, user- or role-specific simplified interfaces, where the visible tools and functions correspond to the responsibilities and permissions of the current user or project.
 
