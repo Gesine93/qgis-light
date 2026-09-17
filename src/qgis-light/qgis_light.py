@@ -79,12 +79,13 @@ class QGISLightPlugin:
         # Load configuration
         self.load_config(config_path)
 
+    # Reihenfolge umgekehrt! - 2026-09-09 TS
     def resolve_config(self) -> str:
         """Resolve configuration path."""
         return (
-            self._resolve_config_by_user()
+            self._resolve_config_by_project()
             or self._resolve_config_by_role()
-            or self._resolve_config_by_project()
+            or self._resolve_config_by_user()
             or os.path.join(self.plugin_dir, "config.json")
         )
 
@@ -135,29 +136,90 @@ class QGISLightPlugin:
             self.log(f"Could not read user configuration: {err}", "error")
             return None
 
+
+    def _get_users(self) -> list[dict]:
+        """Get all user configurations from the QGIS Authentication Manager.
+
+        Returns:
+            List of user configurations.
+        """
+        users = []
+
+        try:
+            manager = QgsApplication.authManager()
+            auth_ids = manager.availableAuthMethodConfigs()
+
+            self.log(
+                f"Found {len(auth_ids)} authentication configurations"
+            )
+
+            for auth_id in auth_ids:
+
+                auth_method_cfg = QgsAuthMethodConfig()
+
+                loaded = manager.loadAuthenticationConfig(
+                    auth_id,
+                    auth_method_cfg,
+                    True,
+                )
+
+                if not loaded:
+                    self.log(
+                        f"Could not load authentication configuration "
+                        f"'{auth_id}'",
+                        "warning",
+                    )
+                    continue
+
+                config = auth_method_cfg.configMap()
+
+                if not config:
+                    self.log(
+                        f"Authentication configuration '{auth_id}' "
+                        f"contains no configuration data",
+                        "warning",
+                    )
+                    continue
+
+                users.append(config)
+
+        except Exception as err:
+            self.log(
+                f"Could not read user configurations: {err}",
+                "error",
+            )
+
+        return users
+
+
     def _resolve_config_by_role(self) -> str | None:
         """
         Resolve configuration path based on user roles in the database.
+
+        Tries all configured QGIS authentication configurations until
+        one is found whose user has a matching database role.
 
         Returns:
             Configuration path if found, otherwise None.
         """
         self.log("Resolving configuration path based on user roles")
 
-        # Get user information
-        user = self._get_user() or {}
+        # Get all user configurations
+        users = self._get_users()
 
-        username = user.get("username")
-        password = user.get("password")
-
-        # Return if no username
-        if not username:
+        if not users:
             self.log("No active user")
             return None
 
-        # Get user roles
+        # Get role configuration entries
         role_entries: list[dict] = self.custom["roles"].get("roles", [])
-        role_names = [entry["rolname"] for entry in role_entries if "rolname" in entry]
+
+        # Collect all configured role names
+        role_names = [
+            role_name
+            for entry in role_entries
+            for role_name in entry.get("rolenames", [])
+        ]
 
         if not role_names:
             self.log("No user roles", "warning")
@@ -168,87 +230,166 @@ class QGISLightPlugin:
         port = int(self.custom["connections"].get("port") or 5432)
         dbname = self.custom["connections"].get("dbname")
 
-        # Return if connections parameters are incomplete
         if not host or not port or not dbname:
-            self.log("Incomplete database connection parameters", "warning")
-            return None
-
-        # Fetch roles defined in the database
-        try:
-            sql = """
-                SELECT r1.rolname
-                FROM pg_roles r
-                JOIN pg_auth_members m ON m.member = r.oid
-                JOIN pg_roles r1 ON m.roleid = r1.oid
-                WHERE r.rolname = %s
-                AND r1.rolname = ANY(%s)
-            """
-            conn = psycopg2.connect(
-                host=host, port=port, dbname=dbname, user=username, password=password
+            self.log(
+                "Incomplete database connection parameters",
+                "warning",
             )
-            cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-            cur.execute(sql, (username, role_names))
-            rows = cur.fetchall()
-            conn.close()
-
-        except Exception as err:
-            self.log(f"Could not fetch roles: {err}", "error")
             return None
 
-        matched_roles = [row["rolname"] for row in rows]
+        # Try every authentication configuration
+        for user in users:
+            username = user.get("username")
+            password = user.get("password")
 
-        if not matched_roles:
-            self.log(f"User '{username}' does not have any roles")
-            return None
+            if not username:
+                continue
 
-        self.log(f"User '{username}' has roles: {matched_roles}")
+            self.log(
+                f"Checking authentication configuration for user '{username}'"
+            )
 
-        for entry in role_entries:
-            if entry.get("rolname") in matched_roles:
+            try:
+                sql = """
+                    SELECT r1.rolname
+                    FROM pg_roles r
+                    JOIN pg_auth_members m ON m.member = r.oid
+                    JOIN pg_roles r1 ON m.roleid = r1.oid
+                    WHERE r.rolname = %s
+                    AND r1.rolname = ANY(%s)
+                """
+
+                conn = psycopg2.connect(
+                    host=host,
+                    port=port,
+                    dbname=dbname,
+                    user=username,
+                    password=password,
+                )
+
+                try:
+                    cur = conn.cursor(
+                        cursor_factory=psycopg2.extras.DictCursor
+                    )
+                    cur.execute(sql, (username, role_names))
+                    rows = cur.fetchall()
+                finally:
+                    conn.close()
+
+            except Exception as err:
+                self.log(
+                    f"Could not fetch roles for user '{username}': {err}",
+                    "warning",
+                )
+                # Try the next authentication configuration
+                continue
+
+            matched_roles = [row["rolname"] for row in rows]
+
+            if not matched_roles:
+                self.log(
+                    f"User '{username}' does not have any matching roles"
+                )
+                continue
+
+            self.log(
+                f"User '{username}' has roles: {matched_roles}"
+            )
+
+            # Check role entries in configured order
+            for entry in role_entries:
+                configured_roles = entry.get("rolenames", [])
+
+                # Check whether any database role matches this entry
+                matching_roles = [
+                    role
+                    for role in matched_roles
+                    if role in configured_roles
+                ]
+
+                if not matching_roles:
+                    continue
+
                 path = self._get_abspath(entry.get("config_path"))
+
                 if path and os.path.isfile(path):
                     self.log(
-                        f"Configuration found for role {entry['rolname']}: {path}"
+                        f"Configuration found for role(s) "
+                        f"{matching_roles} and user '{username}': {path}"
                     )
                     return path
-                else:
-                    self.log(
-                        f"Invalid configuration for role '{entry['rolname']}': {path}",
-                        "warning",
-                    )
 
-        self.log(f"No configuration found for roles '{matched_roles}'")
+                self.log(
+                    f"Invalid configuration for role(s) "
+                    f"{matching_roles}: {path}",
+                    "warning",
+                )
+
+        self.log(
+            "No configuration found for any authentication configuration"
+        )
         return None
+
+
 
     def _resolve_config_by_user(self) -> str | None:
         """Resolve configuration path based on user.
+
+        All available QGIS authentication configurations are checked
+        until a matching username with a valid configuration is found.
 
         Returns:
             Configuration path if found, otherwise None.
         """
         self.log("Resolving configuration path based on user")
 
-        user = self._get_user() or {}
+        users = self._get_users()
 
-        username = user.get("username")
-        if not username:
+        if not users:
             self.log("No active user")
             return None
 
-        for entry in self.custom["users"].get("users", []):
-            if username in entry.get("usernames", []):
-                path = self._get_abspath(entry.get("config_path"))
-                if path and os.path.isfile(path):
-                    self.log(f"Configuration found for user '{username}': {path}")
-                    return path
-                else:
-                    self.log(
-                        f"Invalid configuration for user '{username}': {path}",
-                        "warning",
-                    )
+        user_entries: list[dict] = self.custom["users"].get("users", [])
 
-        self.log(f"No configuration found for user '{username}'")
+        if not user_entries:
+            self.log("No user configurations", "warning")
+            return None
+
+        # Check all QGIS authentication configurations
+        for user in users:
+            username = user.get("username")
+
+            if not username:
+                continue
+
+            self.log(
+                f"Checking authentication configuration for user '{username}'"
+            )
+
+            # Check configured users
+            for entry in user_entries:
+                usernames = entry.get("usernames", [])
+
+                if username not in usernames:
+                    continue
+
+                path = self._get_abspath(entry.get("config_path"))
+
+                if path and os.path.isfile(path):
+                    self.log(
+                        f"Configuration found for user '{username}': {path}"
+                    )
+                    return path
+
+                self.log(
+                    f"Invalid configuration for user '{username}': {path}",
+                    "warning",
+                )
+
+        self.log("No configuration found for any authentication configuration")
         return None
+
+
 
     def _resolve_config_by_project(self) -> str | None:
         """Resolve configuration path based on project filename.
@@ -256,14 +397,11 @@ class QGISLightPlugin:
         Returns:
             Configuration path if found, otherwise None.
         """
-        self.log("Resolving configuration path based on project filename")
+        self.log("Resolving configuration path based on project title")
 
-        project_path = QgsProject.instance().fileName()
-        if not project_path:
-            self.log("No active project")
-            return None
+        project = QgsProject.instance()
 
-        project_name = os.path.basename(project_path)
+        project_name = project.title()
 
         for entry in self.custom["projects"].get("projects", []):
             if project_name in entry.get("project_names", []):

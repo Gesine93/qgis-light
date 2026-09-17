@@ -2,7 +2,7 @@
   "_comment": "Role mapping: Which pgAdmin role gets which config? Order determines priority, first match wins.",
   "roles": [
     {
-      "rolname": "",
+      "rolenames": [],
       "config_path": ""
     }
   ]

@@ -252,23 +252,25 @@ will also facilitate initiatives like simplification.
 
 ## Create different configs for different users and/or user groups
 
-This feature was contributed by Gesine Fengler (https://github.com/Gesine93) and enables automatic loading of
-different configuration files based on the authenticated QGIS user.
+This feature was contributed by Gesine Fengler ([https://github.com/Gesine93](https://github.com/Gesine93)) and enables automatic loading of different configuration files based on the authenticated QGIS user or opened QGIS project.
 
-This allows organizations to provide user- or role-specific simplified
-interfaces, where the visible tools and functions correspond to the
-responsibilities and permissions of the current user.
+This allows organizations to provide project, user- or role-specific simplified interfaces, where the visible tools and functions correspond to the responsibilities and permissions of the current user or project.
 
-The feature uses the QGIS Authentication Manager to identify the active user and
-automatically load the matching configuration file. It can be used in two ways:
+The feature uses the QGIS Authentication Manager to identify the active user and automatically load the matching configuration file. It can be used in three ways:
 
 - **User-based configuration**: Individual users are defined in the
   `users.json` file, and each user is assigned a dedicated configuration file.
 - **Role-based configuration**: PostgreSQL/PostGIS roles
   are used as authenticated users, and matching
   configuration files are loaded automatically.
-  - **Project-based configuration**: The configuration can also be defined by project name. 
+- **Project-based configuration**: The configuration can also be defined by project title. 
   The project and config paths can be defined in the `projects.json`
+
+The order in which the specific configurations are searched for is as follows:
+- First, `projects.json` is checked to see if a QGIS Light configuration is assigned to the current project title.
+- If no match is found, the system checks for the existence of database roles[3] listed in `roles.json`. In the (PostgreSQL) database defined in `connections.json`, the role assignments for all configurations in the QGIS authentication system are queried.
+- If no (matching) role is found, the usernames listed in `users.json` are finally compared with the entries in the authentication system.
+- Otherwise, the `config.json` file located in the plugin directory is used.
 
 ### Prerequisites
 
